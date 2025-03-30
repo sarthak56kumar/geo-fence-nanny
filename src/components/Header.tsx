@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Link } from 'react-router-dom';
 
 const Header: React.FC = () => {
   const { geofences, userLocation, isPointInGeofence, locateUser } = useGeofence();
@@ -62,6 +63,12 @@ const Header: React.FC = () => {
           <MapPin className="h-4 w-4 mr-1" />
           Update Location
         </Button>
+        
+        <Link to="/settings">
+          <Button variant="ghost" size="icon">
+            <Settings className="h-5 w-5" />
+          </Button>
+        </Link>
       </div>
     </header>
   );

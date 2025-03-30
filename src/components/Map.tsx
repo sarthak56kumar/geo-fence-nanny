@@ -6,7 +6,7 @@ import { useGeofence } from '@/context/GeofenceContext';
 import { MAPBOX_CONFIG } from '@/config/mapbox';
 import * as turf from '@turf/turf';
 import { Button } from '@/components/ui/button';
-import { MapPin } from 'lucide-react';
+import { MapPin, Layers, Navigation } from 'lucide-react';
 
 // Set mapbox token
 mapboxgl.accessToken = MAPBOX_CONFIG.mapboxApiAccessToken;
@@ -15,9 +15,8 @@ const Map: React.FC = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const userMarker = useRef<mapboxgl.Marker | null>(null);
-  const geofenceMarkers = useRef<Record<string, mapboxgl.Marker>>({});
-  const geofenceCircles = useRef<Record<string, string>>({});
   const [addingGeofence, setAddingGeofence] = useState(false);
+  const [mapStyle, setMapStyle] = useState<string>(MAPBOX_CONFIG.mapStyle);
   
   const { 
     geofences, 
@@ -34,7 +33,7 @@ const Map: React.FC = () => {
 
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: MAPBOX_CONFIG.mapStyle,
+      style: mapStyle,
       center: MAPBOX_CONFIG.defaultCenter,
       zoom: MAPBOX_CONFIG.defaultZoom,
     });
@@ -134,7 +133,20 @@ const Map: React.FC = () => {
         map.current = null;
       }
     };
-  }, []);
+  }, [mapStyle]);
+
+  // Update map style
+  const toggleMapStyle = () => {
+    const newStyle = mapStyle === 'mapbox://styles/mapbox/streets-v12' 
+      ? 'mapbox://styles/mapbox/satellite-streets-v12' 
+      : 'mapbox://styles/mapbox/streets-v12';
+    
+    setMapStyle(newStyle);
+    
+    if (map.current) {
+      map.current.setStyle(newStyle);
+    }
+  };
 
   // Update map when geofences change
   useEffect(() => {
@@ -226,6 +238,14 @@ const Map: React.FC = () => {
         >
           <MapPin className="mr-2 h-4 w-4" />
           Locate Me
+        </Button>
+        
+        <Button 
+          size="sm"
+          onClick={toggleMapStyle}
+        >
+          <Layers className="mr-2 h-4 w-4" />
+          Toggle Map
         </Button>
         
         <Button 
