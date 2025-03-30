@@ -4,9 +4,9 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useGeofence } from '@/context/GeofenceContext';
 import { MAPBOX_CONFIG } from '@/config/mapbox';
-import * as turf from '@turf/turf';
-import { Button } from '@/components/ui/button';
-import { MapPin, Layers, Navigation } from 'lucide-react';
+import MapControls from '@/components/map/MapControls';
+import MapOverlays from '@/components/map/MapOverlays';
+import { updateGeofencesSource, initializeGeofenceLayers, createUserMarker } from '@/utils/mapUtils';
 
 // Set mapbox token
 mapboxgl.accessToken = MAPBOX_CONFIG.mapboxApiAccessToken;
@@ -62,46 +62,10 @@ const Map: React.FC = () => {
       console.log("Map loaded successfully");
       setMapInitialized(true);
       
-      // Add an empty geojson source for geofence circles
-      map.current?.addSource('geofences', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: []
-        }
-      });
-
-      // Add a fill layer for geofence areas
-      map.current?.addLayer({
-        id: 'geofence-fills',
-        type: 'fill',
-        source: 'geofences',
-        paint: {
-          'fill-color': [
-            'case',
-            ['boolean', ['get', 'active'], false],
-            '#3B82F680',  // Active geofence - semi-transparent blue
-            '#10B98180'   // Inactive geofence - semi-transparent green
-          ],
-          'fill-opacity': 0.3
-        }
-      });
-
-      // Add a border line for geofence areas
-      map.current?.addLayer({
-        id: 'geofence-borders',
-        type: 'line',
-        source: 'geofences',
-        paint: {
-          'line-color': [
-            'case',
-            ['boolean', ['get', 'active'], false],
-            '#3B82F6',  // Active geofence - blue
-            '#10B981'   // Inactive geofence - green
-          ],
-          'line-width': 2
-        }
-      });
+      // Initialize geofence layers
+      if (map.current) {
+        initializeGeofenceLayers(map.current);
+      }
 
       // Initialize user location
       locateUser().then(location => {
@@ -158,45 +122,9 @@ const Map: React.FC = () => {
   // Update map when geofences change
   useEffect(() => {
     if (!map.current || !mapInitialized || !map.current.isStyleLoaded()) return;
-
+    
     console.log("Updating geofences on map");
-    
-    try {
-      // Update geofence source data
-      const source = map.current.getSource('geofences') as mapboxgl.GeoJSONSource;
-      if (!source) {
-        console.error("Geofences source not found");
-        return;
-      }
-      
-      // Create features for all geofences
-      const features = geofences.map(geofence => {
-        const circle = turf.circle(
-          geofence.center, 
-          geofence.radius, 
-          { steps: 64, units: 'kilometers' }
-        );
-        
-        // Add properties to the circle
-        circle.properties = {
-          id: geofence.id,
-          name: geofence.name,
-          enabled: geofence.enabled,
-          active: userLocation ? isPointInGeofence(userLocation, geofence) : false
-        };
-        
-        return circle;
-      });
-      
-      // Update the source data
-      source.setData({
-        type: 'FeatureCollection',
-        features
-      });
-    } catch (error) {
-      console.error("Error updating geofences:", error);
-    }
-    
+    updateGeofencesSource(map.current, geofences, userLocation, isPointInGeofence);
   }, [geofences, userLocation, mapInitialized]);
 
   // Update user location marker
@@ -205,90 +133,37 @@ const Map: React.FC = () => {
     
     // Create or update user marker
     if (!userMarker.current) {
-      // Create a DOM element for the marker
-      const el = document.createElement('div');
-      el.className = 'user-marker';
-      el.style.width = '20px';
-      el.style.height = '20px';
-      el.style.borderRadius = '50%';
-      el.style.backgroundColor = '#3B82F6';
-      el.style.border = '3px solid white';
-      el.style.boxShadow = '0 0 0 2px rgba(0, 0, 0, 0.1)';
-
-      // Add pulse animation
-      const pulse = document.createElement('div');
-      pulse.className = 'animate-pulse';
-      pulse.style.position = 'absolute';
-      pulse.style.width = '30px';
-      pulse.style.height = '30px';
-      pulse.style.borderRadius = '50%';
-      pulse.style.backgroundColor = 'rgba(59, 130, 246, 0.5)';
-      pulse.style.top = '-8px';
-      pulse.style.left = '-8px';
-      pulse.style.zIndex = '-1';
-      el.appendChild(pulse);
-
-      // Create the marker
-      userMarker.current = new mapboxgl.Marker(el)
-        .setLngLat(userLocation)
-        .addTo(map.current);
+      userMarker.current = createUserMarker(map.current, userLocation);
     } else {
       userMarker.current.setLngLat(userLocation);
     }
     
     // Check geofence status when user location changes
     checkGeofenceStatus();
-    
   }, [userLocation, mapInitialized]);
+
+  // Toggle adding geofence mode
+  const toggleAddingGeofence = () => {
+    setAddingGeofence(!addingGeofence);
+  };
 
   return (
     <div className="relative w-full h-full min-h-[400px]">
       <div ref={mapContainer} className="absolute inset-0" />
       
-      {/* Map controls overlay */}
-      <div className="absolute bottom-4 right-4 z-10 flex flex-col space-y-2">
-        <Button 
-          size="sm" 
-          onClick={() => locateUser()}
-          className="group"
-        >
-          <MapPin className="mr-2 h-4 w-4" />
-          Locate Me
-        </Button>
-        
-        <Button 
-          size="sm"
-          onClick={toggleMapStyle}
-        >
-          <Layers className="mr-2 h-4 w-4" />
-          Toggle Map
-        </Button>
-        
-        <Button 
-          size="sm" 
-          variant={addingGeofence ? "destructive" : "default"}
-          onClick={() => setAddingGeofence(!addingGeofence)}
-        >
-          {addingGeofence ? 'Cancel' : 'Add Geofence'}
-        </Button>
-      </div>
+      {/* Map controls */}
+      <MapControls 
+        onLocateUser={locateUser}
+        onToggleMapStyle={toggleMapStyle}
+        onToggleAddingGeofence={toggleAddingGeofence}
+        addingGeofence={addingGeofence}
+      />
       
-      {/* Add geofence instructions */}
-      {addingGeofence && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-card p-4 rounded-md shadow-md border border-border">
-          <p className="text-sm font-medium">Click anywhere on the map to add a geofence</p>
-        </div>
-      )}
-      
-      {/* Loading indicator */}
-      {!mapInitialized && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/50">
-          <div className="flex flex-col items-center space-y-2">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-            <p className="text-sm font-medium">Loading map...</p>
-          </div>
-        </div>
-      )}
+      {/* Map overlays (instructions and loading) */}
+      <MapOverlays 
+        addingGeofence={addingGeofence}
+        mapInitialized={mapInitialized}
+      />
     </div>
   );
 };
