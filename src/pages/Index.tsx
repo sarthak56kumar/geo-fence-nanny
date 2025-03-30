@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import Map from '@/components/Map';
 import GeofenceList from '@/components/GeofenceList';
 import Header from '@/components/Header';
@@ -16,7 +16,7 @@ const Index = () => {
         
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Main content - Map and Geofence List */}
-          <div className="flex-1 md:flex-[2] overflow-hidden h-[60vh] md:h-auto">
+          <div className="flex-1 md:flex-[2] overflow-hidden h-[50vh] md:h-full">
             <Map />
           </div>
           

@@ -34,68 +34,75 @@ const Map: React.FC = () => {
 
     console.log("Initializing map...");
     
-    // Create map instance
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: mapStyle,
-      center: MAPBOX_CONFIG.defaultCenter,
-      zoom: MAPBOX_CONFIG.defaultZoom,
-    });
+    try {
+      // Create map instance
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: mapStyle,
+        center: MAPBOX_CONFIG.defaultCenter,
+        zoom: MAPBOX_CONFIG.defaultZoom,
+      });
 
-    // Add navigation controls
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    
-    // Add fullscreen control
-    map.current.addControl(new mapboxgl.FullscreenControl());
-    
-    // Add geolocate control
-    const geolocateControl = new mapboxgl.GeolocateControl({
-      positionOptions: {
-        enableHighAccuracy: true
-      },
-      trackUserLocation: true
-    });
-    map.current.addControl(geolocateControl);
-
-    // Wait for map to load
-    map.current.on('load', () => {
-      console.log("Map loaded successfully");
-      setMapInitialized(true);
+      // Add navigation controls
+      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
       
-      // Initialize geofence layers
-      if (map.current) {
-        initializeGeofenceLayers(map.current);
-      }
-
-      // Initialize user location
-      locateUser().then(location => {
-        if (location && map.current) {
-          map.current.flyTo({
-            center: location,
-            zoom: 14
-          });
+      // Add fullscreen control
+      map.current.addControl(new mapboxgl.FullscreenControl());
+      
+      // Wait for map to load
+      map.current.on('load', () => {
+        console.log("Map loaded successfully");
+        
+        // Initialize geofence layers
+        if (map.current) {
+          initializeGeofenceLayers(map.current);
+          
+          // Update map with current geofences
+          if (geofences.length > 0) {
+            updateGeofencesSource(map.current, geofences, userLocation, isPointInGeofence);
+          }
         }
-      });
-    });
+        
+        setMapInitialized(true);
 
-    // Handle geofence creation
-    map.current.on('click', (e) => {
-      if (!addingGeofence || !map.current) return;
-      
-      const coordinates: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      
-      // Add a new geofence
-      addGeofence({
-        center: coordinates,
-        radius: MAPBOX_CONFIG.circleRadius,
-        name: `Geofence ${geofences.length + 1}`,
-        enabled: true,
-        disableCamera: true,
-        disableMicrophone: true
+        // Initialize user location
+        locateUser().then(location => {
+          if (location && map.current) {
+            map.current.flyTo({
+              center: location,
+              zoom: 14
+            });
+          }
+        });
       });
-      
-      setAddingGeofence(false);
-    });
+
+      // Handle map errors
+      map.current.on('error', (e) => {
+        console.error("Map error:", e);
+      });
+
+      // Handle geofence creation
+      map.current.on('click', (e) => {
+        if (!addingGeofence || !map.current) return;
+        
+        const coordinates: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        
+        // Add a new geofence
+        addGeofence({
+          center: coordinates,
+          radius: MAPBOX_CONFIG.circleRadius,
+          name: `Geofence ${geofences.length + 1}`,
+          enabled: true,
+          disableCamera: true,
+          disableMicrophone: true
+        });
+        
+        setAddingGeofence(false);
+      });
+    } catch (error) {
+      console.error("Error initializing map:", error);
+      setMapInitialized(false);
+    }
 
     // Cleanup function
     return () => {
@@ -113,23 +120,45 @@ const Map: React.FC = () => {
       : 'mapbox://styles/mapbox/streets-v12';
     
     setMapStyle(newStyle);
-    
-    if (map.current) {
-      map.current.setStyle(newStyle);
-    }
   };
 
   // Update map when geofences change
   useEffect(() => {
-    if (!map.current || !mapInitialized || !map.current.isStyleLoaded()) return;
+    if (!map.current || !mapInitialized) return;
     
-    console.log("Updating geofences on map");
-    updateGeofencesSource(map.current, geofences, userLocation, isPointInGeofence);
+    // Check if style is loaded before updating geofences
+    if (map.current.isStyleLoaded()) {
+      console.log("Updating geofences on map");
+      updateGeofencesSource(map.current, geofences, userLocation, isPointInGeofence);
+    } else {
+      // Wait for style to load and then update
+      map.current.once('style.load', () => {
+        console.log("Style loaded, updating geofences");
+        if (map.current) {
+          initializeGeofenceLayers(map.current);
+          updateGeofencesSource(map.current, geofences, userLocation, isPointInGeofence);
+        }
+      });
+    }
   }, [geofences, userLocation, mapInitialized]);
 
   // Update user location marker
   useEffect(() => {
     if (!map.current || !userLocation || !mapInitialized) return;
+    
+    if (!map.current.isStyleLoaded()) {
+      map.current.once('style.load', () => {
+        if (map.current && userLocation) {
+          // Create or update user marker
+          if (!userMarker.current) {
+            userMarker.current = createUserMarker(map.current, userLocation);
+          } else {
+            userMarker.current.setLngLat(userLocation);
+          }
+        }
+      });
+      return;
+    }
     
     // Create or update user marker
     if (!userMarker.current) {
@@ -148,7 +177,7 @@ const Map: React.FC = () => {
   };
 
   return (
-    <div className="relative w-full h-full min-h-[400px]">
+    <div className="relative w-full h-full" style={{ minHeight: '400px', height: '100%' }}>
       <div ref={mapContainer} className="absolute inset-0" />
       
       {/* Map controls */}

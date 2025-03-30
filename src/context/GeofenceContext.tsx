@@ -5,9 +5,9 @@ import * as turf from '@turf/turf';
 import { toast } from '@/components/ui/use-toast';
 
 // Define types
-type Coordinate = [number, number]; // [longitude, latitude]
+export type Coordinate = [number, number]; // [longitude, latitude]
 
-interface Geofence {
+export interface Geofence {
   id: string;
   center: Coordinate;
   radius: number; // in kilometers
