@@ -17,6 +17,7 @@ const Map: React.FC = () => {
   const userMarker = useRef<mapboxgl.Marker | null>(null);
   const [addingGeofence, setAddingGeofence] = useState(false);
   const [mapStyle, setMapStyle] = useState<string>(MAPBOX_CONFIG.mapStyle);
+  const [mapInitialized, setMapInitialized] = useState(false);
   
   const { 
     geofences, 
@@ -31,6 +32,9 @@ const Map: React.FC = () => {
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
+    console.log("Initializing map...");
+    
+    // Create map instance
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: mapStyle,
@@ -55,6 +59,9 @@ const Map: React.FC = () => {
 
     // Wait for map to load
     map.current.on('load', () => {
+      console.log("Map loaded successfully");
+      setMapInitialized(true);
+      
       // Add an empty geojson source for geofence circles
       map.current?.addSource('geofences', {
         type: 'geojson',
@@ -150,42 +157,51 @@ const Map: React.FC = () => {
 
   // Update map when geofences change
   useEffect(() => {
-    if (!map.current || !map.current.isStyleLoaded()) return;
+    if (!map.current || !mapInitialized || !map.current.isStyleLoaded()) return;
 
-    // Update geofence source data
-    const source = map.current.getSource('geofences') as mapboxgl.GeoJSONSource;
-    if (!source) return;
+    console.log("Updating geofences on map");
     
-    // Create features for all geofences
-    const features = geofences.map(geofence => {
-      const circle = turf.circle(
-        geofence.center, 
-        geofence.radius, 
-        { steps: 64, units: 'kilometers' }
-      );
+    try {
+      // Update geofence source data
+      const source = map.current.getSource('geofences') as mapboxgl.GeoJSONSource;
+      if (!source) {
+        console.error("Geofences source not found");
+        return;
+      }
       
-      // Add properties to the circle
-      circle.properties = {
-        id: geofence.id,
-        name: geofence.name,
-        enabled: geofence.enabled,
-        active: userLocation ? isPointInGeofence(userLocation, geofence) : false
-      };
+      // Create features for all geofences
+      const features = geofences.map(geofence => {
+        const circle = turf.circle(
+          geofence.center, 
+          geofence.radius, 
+          { steps: 64, units: 'kilometers' }
+        );
+        
+        // Add properties to the circle
+        circle.properties = {
+          id: geofence.id,
+          name: geofence.name,
+          enabled: geofence.enabled,
+          active: userLocation ? isPointInGeofence(userLocation, geofence) : false
+        };
+        
+        return circle;
+      });
       
-      return circle;
-    });
+      // Update the source data
+      source.setData({
+        type: 'FeatureCollection',
+        features
+      });
+    } catch (error) {
+      console.error("Error updating geofences:", error);
+    }
     
-    // Update the source data
-    source.setData({
-      type: 'FeatureCollection',
-      features
-    });
-    
-  }, [geofences, userLocation]);
+  }, [geofences, userLocation, mapInitialized]);
 
   // Update user location marker
   useEffect(() => {
-    if (!map.current || !userLocation) return;
+    if (!map.current || !userLocation || !mapInitialized) return;
     
     // Create or update user marker
     if (!userMarker.current) {
@@ -223,10 +239,10 @@ const Map: React.FC = () => {
     // Check geofence status when user location changes
     checkGeofenceStatus();
     
-  }, [userLocation]);
+  }, [userLocation, mapInitialized]);
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full min-h-[400px]">
       <div ref={mapContainer} className="absolute inset-0" />
       
       {/* Map controls overlay */}
@@ -261,6 +277,16 @@ const Map: React.FC = () => {
       {addingGeofence && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-card p-4 rounded-md shadow-md border border-border">
           <p className="text-sm font-medium">Click anywhere on the map to add a geofence</p>
+        </div>
+      )}
+      
+      {/* Loading indicator */}
+      {!mapInitialized && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+          <div className="flex flex-col items-center space-y-2">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+            <p className="text-sm font-medium">Loading map...</p>
+          </div>
         </div>
       )}
     </div>

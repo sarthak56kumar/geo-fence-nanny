@@ -16,7 +16,7 @@ const Index = () => {
         
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Main content - Map and Geofence List */}
-          <div className="flex-1 md:flex-[2] overflow-hidden">
+          <div className="flex-1 md:flex-[2] overflow-hidden h-[60vh] md:h-auto">
             <Map />
           </div>
           
